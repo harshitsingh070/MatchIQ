@@ -27,8 +27,6 @@ import com.atsmatcher.repository.StudentProfileRepository;
 import com.atsmatcher.repository.UserRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-
-
 @RestController
 @RequestMapping("/api/resumes")
 public class ResumeController {
@@ -43,9 +41,9 @@ public class ResumeController {
     private String ragServiceUrl;
 
     public ResumeController(ResumeRepository resumeRepository,
-                             StudentProfileRepository studentProfileRepository,
-                             UserRepository userRepository,
-                             RestTemplate restTemplate) {
+            StudentProfileRepository studentProfileRepository,
+            UserRepository userRepository,
+            RestTemplate restTemplate) {
         this.resumeRepository = resumeRepository;
         this.studentProfileRepository = studentProfileRepository;
         this.userRepository = userRepository;
@@ -55,7 +53,8 @@ public class ResumeController {
     @PostMapping
     @PreAuthorize("hasRole('STUDENT')")
     public ResponseEntity<?> uploadResume(@RequestParam("file") MultipartFile file,
-                                           Authentication authentication) {
+            Authentication authentication) {
+
         // 1. Find the logged-in user (email comes from the JWT via JwtAuthFilter)
         User user = userRepository.findByEmail(authentication.getName())
                 .orElseThrow(() -> new RuntimeException("User not found"));
@@ -69,28 +68,47 @@ public class ResumeController {
                 });
 
         // 3. Forward the file to the Python RAG service for parsing
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.MULTIPART_FORM_DATA);
+        HttpHeaders multipartHeaders = new HttpHeaders();
+        multipartHeaders.setContentType(MediaType.MULTIPART_FORM_DATA);
 
         MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
         body.add("file", file.getResource());
 
-        HttpEntity<MultiValueMap<String, Object>> requestEntity = new HttpEntity<>(body, headers);
+        HttpEntity<MultiValueMap<String, Object>> parseRequestEntity = new HttpEntity<>(body, multipartHeaders);
 
         Map<String, Object> parsed = restTemplate.postForObject(
-                ragServiceUrl + "/parse-resume", requestEntity, Map.class);
+                ragServiceUrl + "/parse-resume", parseRequestEntity, Map.class);
 
         // 4. Save the resume with parsed data
         Resume resume = new Resume();
         resume.setStudent(profile);
-        
         resume.setRawText((String) parsed.get("raw_text"));
+
         try {
-    resume.setParsedSections(objectMapper.writeValueAsString(parsed.get("sections")));
-} catch (Exception e) {
-    resume.setParsedSections("{}");
-}
+            resume.setParsedSections(objectMapper.writeValueAsString(parsed.get("sections")));
+        } catch (Exception e) {
+            resume.setParsedSections("{}");
+        }
+
         resumeRepository.save(resume);
+
+        // 5. Auto-embed the resume - failure here should NOT fail the whole upload,
+        //    since the resume itself is already saved successfully at this point.
+        Map<String, Object> embedRequest = Map.of(
+                "resume_id", resume.getId().toString(),
+                "text", resume.getRawText(),
+                "section", "full"
+        );
+
+        HttpHeaders jsonHeaders = new HttpHeaders();
+        jsonHeaders.setContentType(MediaType.APPLICATION_JSON);
+        HttpEntity<Map<String, Object>> embedRequestEntity = new HttpEntity<>(embedRequest, jsonHeaders);
+
+        try {
+            restTemplate.postForObject(ragServiceUrl + "/embed-resume", embedRequestEntity, Map.class);
+        } catch (Exception e) {
+            System.err.println("Warning: failed to embed resume " + resume.getId() + ": " + e.getMessage());
+        }
 
         return ResponseEntity.ok(resume);
     }
