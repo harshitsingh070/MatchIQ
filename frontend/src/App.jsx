@@ -1,24 +1,45 @@
-import { BrowserRouter, Routes, Route, Link } from 'react-router-dom';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import './styles/tokens.css';
+import AppHeader from './components/AppHeader.jsx';
+import RequireAuth from './components/RequireAuth.jsx';
+import Login from './pages/Login.jsx';
+import Register from './pages/Register.jsx';
 import StudentDashboard from './pages/StudentDashboard.jsx';
 import PlacementCellDashboard from './pages/PlacementCellDashboard.jsx';
 import RecruiterDashboard from './pages/RecruiterDashboard.jsx';
-import Login from './pages/Login.jsx';
 
 export default function App() {
   return (
     <BrowserRouter>
-      <nav style={{ padding: '1rem', borderBottom: '1px solid #ddd' }}>
-        <Link to="/" style={{ marginRight: '1rem' }}>Login</Link>
-        <Link to="/student" style={{ marginRight: '1rem' }}>Student</Link>
-        <Link to="/placement-cell" style={{ marginRight: '1rem' }}>Placement cell</Link>
-        <Link to="/recruiter">Recruiter</Link>
-      </nav>
+      <AppHeader />
 
       <Routes>
         <Route path="/" element={<Login />} />
-        <Route path="/student" element={<StudentDashboard />} />
-        <Route path="/placement-cell" element={<PlacementCellDashboard />} />
-        <Route path="/recruiter" element={<RecruiterDashboard />} />
+        <Route path="/register" element={<Register />} />
+        <Route
+          path="/student"
+          element={
+            <RequireAuth role="STUDENT">
+              <StudentDashboard />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/placement-cell"
+          element={
+            <RequireAuth role="PLACEMENT_CELL">
+              <PlacementCellDashboard />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/recruiter"
+          element={
+            <RequireAuth role="RECRUITER">
+              <RecruiterDashboard />
+            </RequireAuth>
+          }
+        />
       </Routes>
     </BrowserRouter>
   );

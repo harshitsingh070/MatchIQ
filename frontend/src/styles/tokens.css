@@ -1,0 +1,57 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-paper text-ink font-body antialiased m-0;
+  }
+
+  /* brass glow on any keyboard-focused element — official, not "app-y" */
+  :focus-visible {
+    @apply outline-none ring-2 ring-brass/35 rounded;
+  }
+}
+
+@layer components {
+  /* Keep a small number of component classes for patterns that repeat
+     across many files, so JSX doesn't turn into unreadable utility soup.
+     Everything else should be inline Tailwind utility classes. */
+
+  .page-shell {
+    @apply max-w-3xl mx-auto px-8 pt-12 pb-20;
+  }
+
+  .eyebrow {
+    @apply font-mono text-xs tracking-widest uppercase text-ink-soft mb-2;
+  }
+
+  .field-label {
+    @apply block font-mono text-xs tracking-wide uppercase text-ink-soft mb-1.5;
+  }
+
+  .field-input {
+    @apply w-full px-3.5 py-2.5 border border-rule bg-paper-raised
+           font-body text-sm text-ink rounded
+           focus:outline-none focus:border-brass focus:ring-2 focus:ring-brass/15
+           transition-colors;
+  }
+
+  .btn-primary {
+    @apply font-body font-semibold text-sm px-6 py-3
+           bg-ink text-paper-raised rounded
+           hover:bg-[#2A3859] active:translate-y-px transition-colors;
+  }
+
+  .btn-primary-sm {
+    @apply btn-primary px-4 py-1.5 text-xs;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
