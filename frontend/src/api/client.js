@@ -99,6 +99,11 @@ export function getMyMatches() {
   return request('/matches/my');
 }
 
+// Score trend between the student's latest resume and the previous one.
+export function getMyTrend() {
+  return request('/matches/trend');
+}
+
 // Student's most recent resume (parsed sections + upload metadata), for the
 // "your resume" panel on the dashboard.
 export function getMyResume() {

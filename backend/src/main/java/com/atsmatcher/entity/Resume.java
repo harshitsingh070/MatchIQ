@@ -30,6 +30,9 @@ public class Resume {
     @Column(name = "raw_text", columnDefinition = "TEXT")
     private String rawText;
 
+    @Column(name = "file_name")
+    private String fileName;
+
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "parsed_sections")
     private String parsedSections; // stored as a JSON string
@@ -44,6 +47,8 @@ public class Resume {
     public void setStudent(StudentProfile student) { this.student = student; }
     public String getRawText() { return rawText; }
     public void setRawText(String rawText) { this.rawText = rawText; }
+    public String getFileName() { return fileName; }
+    public void setFileName(String fileName) { this.fileName = fileName; }
     public String getParsedSections() { return parsedSections; }
     public void setParsedSections(String parsedSections) { this.parsedSections = parsedSections; }
     public LocalDateTime getUploadedAt() { return uploadedAt; }

@@ -20,6 +20,7 @@ import io
 
 from dotenv import load_dotenv
 load_dotenv(dotenv_path=Path(__file__).resolve().parent / ".env")
+load_dotenv(dotenv_path=Path(__file__).resolve().parent.parent / ".env")
 
 from database import get_connection
 from openai import OpenAI
@@ -70,6 +71,43 @@ def get_llm_client(provider: str) -> OpenAI:
     return client
 
 
+def parse_llm_response(text: str) -> dict:
+    """
+    Extract EXPLANATION / PRESENT / MISSING sections from the LLM's structured
+    answer. Gracefully degrades: if the model doesn't follow the format, the
+    whole text becomes the explanation and the skill lists are empty.
+    """
+    explanation = text.strip()
+    present_skills: list[str] = []
+    missing_skills: list[str] = []
+
+    def split_list(block: str) -> list[str]:
+        items = [item.strip() for item in block.split(",") if item.strip()]
+        return [item for item in items if item.lower() != "none"]
+
+    explanation_match = re.search(
+        r"EXPLANATION:\s*(.*?)(?=\n\s*PRESENT:|\n\s*MISSING:|$)",
+        text, re.DOTALL | re.IGNORECASE)
+    present_match = re.search(
+        r"PRESENT:\s*(.*?)(?=\n\s*MISSING:|$)",
+        text, re.DOTALL | re.IGNORECASE)
+    missing_match = re.search(
+        r"MISSING:\s*(.*)", text, re.DOTALL | re.IGNORECASE)
+
+    if explanation_match:
+        explanation = explanation_match.group(1).strip()
+    if present_match:
+        present_skills = split_list(present_match.group(1))
+    if missing_match:
+        missing_skills = split_list(missing_match.group(1))
+
+    return {
+        "explanation": explanation,
+        "present_skills": present_skills,
+        "missing_skills": missing_skills,
+    }
+
+
 def generate_explanation(prompt: str) -> tuple[str, str]:
     """
     Tries each provider in priority order. Returns (explanation, provider_used)
@@ -83,7 +121,7 @@ def generate_explanation(prompt: str) -> tuple[str, str]:
             client = get_llm_client(provider)
             response = client.chat.completions.create(
                 model=get_llm_model(provider),
-                max_tokens=200,
+                max_tokens=300,
                 messages=[{"role": "user", "content": prompt}],
             )
             explanation = response.choices[0].message.content
@@ -334,12 +372,19 @@ Job posting:
 Resume:
 {resume_text}
 
-In 2-3 short sentences, explain how well this resume matches the job posting.
-Mention specific skills that match, and specific skills or requirements that seem missing.
-Be concise and factual - do not invent skills not present in the resume."""
+Respond with EXACTLY three labelled sections:
+
+EXPLANATION:
+In 2-3 short sentences, explain how well this resume matches the job posting. Mention specific skills that match, and specific requirements that seem missing. Be concise and factual - do not invent skills not present in the resume.
+
+PRESENT:
+Comma-separated list of the resume's skills that satisfy the posting's requirements.
+
+MISSING:
+Comma-separated list of the posting's required skills or attributes that the resume does not mention. Write "none" if nothing is missing."""
 
     try:
-        explanation, provider_used = generate_explanation(prompt)
+        raw_text, provider_used = generate_explanation(prompt)
     except RuntimeError as exc:
         return {
             "resume_id": req.resume_id,
@@ -347,9 +392,13 @@ Be concise and factual - do not invent skills not present in the resume."""
             "error": str(exc),
         }
 
+    parsed = parse_llm_response(raw_text)
+
     return {
         "resume_id": req.resume_id,
         "posting_id": req.posting_id,
         "provider": provider_used,
-        "explanation": explanation,
+        "explanation": parsed["explanation"],
+        "present_skills": parsed["present_skills"],
+        "missing_skills": parsed["missing_skills"],
     }

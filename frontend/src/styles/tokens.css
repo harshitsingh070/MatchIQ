@@ -19,7 +19,7 @@
      Everything else should be inline Tailwind utility classes. */
 
   .page-shell {
-    @apply max-w-3xl mx-auto px-8 pt-12 pb-20;
+    @apply max-w-6xl mx-auto px-8 pt-12 pb-20;
   }
 
   .eyebrow {

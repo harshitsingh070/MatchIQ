@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { getJobPostings, getMyMatches, uploadResume } from '../api/client.js';
+import { getJobPostings, getMyMatches, getMyTrend, uploadResume } from '../api/client.js';
 import MatchSeal from '../components/MatchSeal.jsx';
 import ResumePanel from '../components/ResumePanel.jsx';
 
@@ -15,6 +15,7 @@ const TONE_KEY = [
 export default function StudentDashboard() {
   const [matches, setMatches] = useState([]);
   const [postingCount, setPostingCount] = useState(0);
+  const [trend, setTrend] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [uploading, setUploading] = useState(false);
@@ -24,10 +25,11 @@ export default function StudentDashboard() {
   function loadMatches() {
     setLoading(true);
     setError(null);
-    Promise.all([getMyMatches(), getJobPostings()])
-      .then(([matchList, postings]) => {
+    Promise.all([getMyMatches(), getJobPostings(), getMyTrend()])
+      .then(([matchList, postings, trendData]) => {
         setMatches(matchList);
         setPostingCount(postings.length);
+        setTrend(trendData);
       })
       .catch(() =>
         setError(
@@ -59,14 +61,14 @@ export default function StudentDashboard() {
   }
 
   return (
-    <div className="page-shell max-w-5xl">
+    <div className="page-shell">
       <p className="eyebrow">Candidate register — Ranked by fit</p>
       <h1 className="font-display text-3xl font-medium mb-2">Your matches</h1>
       <p className="text-ink-soft text-sm mb-10 max-w-md">
         Postings published by the placement cell, scored against your resume. Rank reflects match strength.
       </p>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-10">
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_420px] gap-12">
         <div>
           <div className="bg-paper-raised border border-rule p-6 mb-8">
             <div className="mb-6">
@@ -86,6 +88,11 @@ export default function StudentDashboard() {
           {error && <div className={ALERT_CLASS}>{error}</div>}
 
           <div className="border-t border-rule">
+            {trend?.hasTrend && (
+              <p className="font-mono text-xs text-ink-soft pt-4 mb-0">
+                {trend.delta >= 0 ? '↑' : '↓'} {Math.abs(trend.delta).toFixed(1)}% avg. match since your last resume
+              </p>
+            )}
             <p className="font-mono text-xs text-ink-soft py-4 flex items-center gap-5">
               <span className="uppercase tracking-widest">Score key</span>
               {TONE_KEY.map(({ tone, label }) => (
@@ -126,7 +133,7 @@ export default function StudentDashboard() {
           </div>
         </div>
 
-        <aside className="border-l border-rule pl-8">
+        <aside className="border-l border-rule pl-8 lg:sticky lg:top-8 lg:self-start lg:max-h-[calc(100vh-4rem)] lg:overflow-y-auto">
           <div className="flex items-start justify-between gap-4 mb-4">
             <div>
               <p className="eyebrow">On file</p>

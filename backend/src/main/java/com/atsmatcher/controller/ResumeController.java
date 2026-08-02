@@ -2,7 +2,6 @@
 package com.atsmatcher.controller;
 
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Value;
@@ -85,6 +84,7 @@ public class ResumeController {
         // 4. Save the resume with parsed data
         Resume resume = new Resume();
         resume.setStudent(profile);
+        resume.setFileName(file.getOriginalFilename());
         resume.setRawText((String) parsed.get("raw_text"));
 
         try {
@@ -131,24 +131,17 @@ public class ResumeController {
                 return ResponseEntity.ok(Map.of("hasResume", false));
             }
 
-            List<Resume> resumes = resumeRepository.findAll().stream()
-                    .filter(r -> r.getStudent().getId().equals(profile.getId()))
-                    .toList();
-
-            if (resumes.isEmpty()) {
+            Resume latest = resumeRepository.findTopByStudentOrderByUploadedAtDesc(profile).orElse(null);
+            if (latest == null) {
                 return ResponseEntity.ok(Map.of("hasResume", false));
             }
 
-            Resume latest = resumes.get(resumes.size() - 1); // same "most recent" shortcut used elsewhere
-
-            String rawText = latest.getRawText() != null ? latest.getRawText() : "";
-            String preview = rawText.substring(0, Math.min(300, rawText.length()));
-
             Map<String, Object> response = new HashMap<>();
             response.put("hasResume", true);
+            response.put("fileName", latest.getFileName());
             response.put("uploadedAt", latest.getUploadedAt().toString());
             response.put("parsedSections", latest.getParsedSections() != null ? latest.getParsedSections() : "{}");
-            response.put("rawTextPreview", preview);
+            response.put("rawText", latest.getRawText() != null ? latest.getRawText() : "");
             return ResponseEntity.ok(response);
 
         } catch (Exception e) {
