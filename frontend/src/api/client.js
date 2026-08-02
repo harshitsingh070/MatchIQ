@@ -24,7 +24,12 @@ async function request(path, options = {}) {
     },
   });
   if (!res.ok) {
-    handleUnauthorized(token);
+    // Only a 401 means the session itself is dead (expired/invalid token).
+    // Other failures (e.g. a 403 because a fresh student has no resume yet)
+    // are legitimate app-level errors and must NOT log the user out.
+    if (res.status === 401) {
+      handleUnauthorized(token);
+    }
     throw new Error(`Request failed: ${res.status}`);
   }
   return res.json();
@@ -56,7 +61,9 @@ export function uploadResume(file) {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   }).then(async (res) => {
     if (!res.ok) {
-      handleUnauthorized(token);
+      if (res.status === 401) {
+        handleUnauthorized(token);
+      }
       throw new Error(`Request failed: ${res.status}`);
     }
     return res.json();
@@ -82,7 +89,23 @@ export function publishPosting(id) {
   return request(`/postings/${id}/publish`, { method: 'PUT' });
 }
 
+// Placement cell analytics: summary stats + per-posting performance.
+export function getAnalytics() {
+  return request('/placement-cell/analytics');
+}
+
 // Student's ranked matches: [{ postingId, title, score, explanation }].
 export function getMyMatches() {
   return request('/matches/my');
+}
+
+// Student's most recent resume (parsed sections + upload metadata), for the
+// "your resume" panel on the dashboard.
+export function getMyResume() {
+  return request('/resumes/mine');
+}
+
+// Ranked candidates for one posting: [{ resumeId, studentEmail, branch, cgpa, score, explanation }].
+export function getCandidates(postingId) {
+  return request(`/postings/${postingId}/candidates`);
 }

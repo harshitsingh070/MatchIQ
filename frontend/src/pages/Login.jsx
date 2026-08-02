@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { login } from '../api/client.js';
-import { getSession, homeForRole, isAuthenticated, setSession } from '../lib/auth.js';
+import { ROLE_ROUTES, getSession, isAuthenticated, setSession } from '../lib/auth.js';
 
 const ALERT_CLASS =
   'font-mono text-xs text-brick bg-brick-bg border border-rule border-l-[3px] border-l-brick px-4 py-3 mb-6';
@@ -16,8 +16,11 @@ export default function Login() {
   const [error, setError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
 
-  if (isAuthenticated()) {
-    return <Navigate to={homeForRole(getSession().role)} replace />;
+  // Only auto-redirect when the stored session is complete and maps to a real
+  // role. A stale/corrupt token (e.g. no role) would otherwise loop forever
+  // redirecting to '/' and block sign-in entirely - show the form instead.
+  if (isAuthenticated() && ROLE_ROUTES[getSession().role]) {
+    return <Navigate to={ROLE_ROUTES[getSession().role]} replace />;
   }
 
   async function handleSubmit(e) {
@@ -27,7 +30,7 @@ export default function Login() {
     try {
       const data = await login(email, password);
       setSession({ token: data.token, role: data.role, email });
-      navigate(homeForRole(data.role));
+      navigate(ROLE_ROUTES[data.role]);
     } catch {
       setError('Sign-in failed. Check your email and password.');
     } finally {

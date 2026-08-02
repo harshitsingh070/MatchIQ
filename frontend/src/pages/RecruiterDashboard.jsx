@@ -3,7 +3,7 @@ import { createPosting, getJobPostings } from '../api/client.js';
 import StatusTag from '../components/StatusTag.jsx';
 import { getSession } from '../lib/auth.js';
 
-const EMPTY_FORM = { title: '', description: '', requiredSkills: '' };
+const EMPTY_FORM = { title: '', description: '', requiredSkills: '', eligibleBranches: '', minCgpa: '' };
 
 const ALERT_CLASS =
   'font-mono text-xs text-brick bg-brick-bg border border-rule border-l-[3px] border-l-brick px-4 py-3 mb-6';
@@ -52,6 +52,10 @@ export default function RecruiterDashboard() {
         title: form.title.trim(),
         description: form.description.trim(),
         requiredSkills: form.requiredSkills.trim(),
+        eligibleBranches: form.eligibleBranches
+          ? form.eligibleBranches.split(',').map((b) => b.trim()).filter(Boolean)
+          : [],
+        minCgpa: form.minCgpa ? parseFloat(form.minCgpa) : null,
       });
       setForm(EMPTY_FORM);
       load();
@@ -109,6 +113,29 @@ export default function RecruiterDashboard() {
             Comma-separated, e.g. Java, SQL, React
           </span>
         </div>
+        <div className="mb-6">
+          <label className="field-label" htmlFor="eligibleBranches">Eligible branches (optional)</label>
+          <input
+            className="field-input"
+            id="eligibleBranches"
+            type="text"
+            value={form.eligibleBranches}
+            onChange={(e) => setField('eligibleBranches', e.target.value)}
+            placeholder="Comma-separated, e.g. CSE, ECE — leave blank for no restriction"
+          />
+        </div>
+        <div className="mb-6">
+          <label className="field-label" htmlFor="minCgpa">Minimum CGPA (optional)</label>
+          <input
+            className="field-input"
+            id="minCgpa"
+            type="number"
+            step="0.1"
+            value={form.minCgpa}
+            onChange={(e) => setField('minCgpa', e.target.value)}
+            placeholder="e.g. 7.5 — leave blank for no cutoff"
+          />
+        </div>
         <button className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed" type="submit" disabled={submitting}>
           {submitting ? 'Saving…' : 'Save posting'}
         </button>
@@ -137,12 +164,21 @@ export default function RecruiterDashboard() {
                 </p>
               </div>
               <div className="shrink-0">
-                <span
-                  className="inline-block font-mono text-xs font-semibold tracking-widest uppercase text-ink-soft bg-paper-raised border border-rule rounded px-3.5 py-2 opacity-60 cursor-not-allowed"
-                  title="Candidate ranking is not available yet"
-                >
-                  View candidates
-                </span>
+                {p.status === 'PUBLISHED' ? (
+                  <a
+                    href={`/recruiter/postings/${p.id}/candidates`}
+                    className="font-mono text-xs uppercase tracking-wide text-brass hover:text-brass-soft transition-colors"
+                  >
+                    View candidates &rarr;
+                  </a>
+                ) : (
+                  <span
+                    className="inline-block font-mono text-xs font-semibold tracking-widest uppercase text-ink-soft bg-paper-raised border border-rule rounded px-3.5 py-2 opacity-60 cursor-not-allowed"
+                    title="Publish this posting to view candidates"
+                  >
+                    View candidates
+                  </span>
+                )}
               </div>
             </div>
           ))}

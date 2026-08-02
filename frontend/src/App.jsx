@@ -7,6 +7,7 @@ import Register from './pages/Register.jsx';
 import StudentDashboard from './pages/StudentDashboard.jsx';
 import PlacementCellDashboard from './pages/PlacementCellDashboard.jsx';
 import RecruiterDashboard from './pages/RecruiterDashboard.jsx';
+import PostingCandidates from './pages/PostingCandidates.jsx';
 
 export default function App() {
   return (
@@ -37,6 +38,14 @@ export default function App() {
           element={
             <RequireAuth role="RECRUITER">
               <RecruiterDashboard />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/recruiter/postings/:id/candidates"
+          element={
+            <RequireAuth role="RECRUITER">
+              <PostingCandidates />
             </RequireAuth>
           }
         />

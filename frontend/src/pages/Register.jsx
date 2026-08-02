@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { register } from '../api/client.js';
-import { ROLE_LABELS, homeForRole, isAuthenticated, setSession } from '../lib/auth.js';
+import { ROLE_LABELS, ROLE_ROUTES, getSession, isAuthenticated, setSession } from '../lib/auth.js';
 
 const ROLES = ['STUDENT', 'PLACEMENT_CELL', 'RECRUITER'];
 
@@ -19,8 +19,10 @@ export default function Register() {
   const [error, setError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
 
-  if (isAuthenticated()) {
-    return <Navigate to={homeForRole(localStorage.getItem('role'))} replace />;
+  // Same guard as Login: only redirect when the stored session is complete.
+  // A stale token with no valid role would loop forever - show the form.
+  if (isAuthenticated() && ROLE_ROUTES[getSession().role]) {
+    return <Navigate to={ROLE_ROUTES[getSession().role]} replace />;
   }
 
   async function handleSubmit(e) {
@@ -30,7 +32,7 @@ export default function Register() {
     try {
       const data = await register(email, password, role);
       setSession({ token: data.token, role: data.role, email });
-      navigate(homeForRole(data.role));
+      navigate(ROLE_ROUTES[data.role]);
     } catch {
       setError('Registration failed. The email may already be registered.');
     } finally {

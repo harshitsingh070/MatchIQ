@@ -1,9 +1,15 @@
 // backend/src/main/java/com/atsmatcher/controller/JobPostingController.java
 package com.atsmatcher.controller;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
@@ -14,12 +20,17 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.client.RestTemplate;
 
 import com.atsmatcher.dto.JobPostingRequest;
 import com.atsmatcher.entity.JobPosting;
+import com.atsmatcher.entity.StudentProfile;
 import com.atsmatcher.entity.User;
 import com.atsmatcher.repository.JobPostingRepository;
+import com.atsmatcher.repository.StudentProfileRepository;
 import com.atsmatcher.repository.UserRepository;
+import com.atsmatcher.service.EligibilityService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 @RestController
 @RequestMapping("/api/postings")
@@ -27,10 +38,24 @@ public class JobPostingController {
 
     private final JobPostingRepository jobPostingRepository;
     private final UserRepository userRepository;
+    private final StudentProfileRepository studentProfileRepository;
+    private final EligibilityService eligibilityService;
+    private final RestTemplate restTemplate;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public JobPostingController(JobPostingRepository jobPostingRepository, UserRepository userRepository) {
+    @Value("${app.rag-service.url}")
+    private String ragServiceUrl;
+
+    public JobPostingController(JobPostingRepository jobPostingRepository,
+                                UserRepository userRepository,
+                                StudentProfileRepository studentProfileRepository,
+                                EligibilityService eligibilityService,
+                                RestTemplate restTemplate) {
         this.jobPostingRepository = jobPostingRepository;
         this.userRepository = userRepository;
+        this.studentProfileRepository = studentProfileRepository;
+        this.eligibilityService = eligibilityService;
+        this.restTemplate = restTemplate;
     }
 
     // Recruiters create postings (start as DRAFT)
@@ -47,6 +72,22 @@ public class JobPostingController {
         posting.setRequiredSkills(req.getRequiredSkills());
         posting.setStatus(JobPosting.Status.DRAFT);
 
+        Map<String, Object> eligibility = new HashMap<>();
+        if (req.getEligibleBranches() != null && !req.getEligibleBranches().isEmpty()) {
+            eligibility.put("branches", req.getEligibleBranches());
+        }
+        if (req.getMinCgpa() != null) {
+            eligibility.put("minCgpa", req.getMinCgpa());
+        }
+
+        if (!eligibility.isEmpty()) {
+            try {
+                posting.setEligibilityCriteria(objectMapper.writeValueAsString(eligibility));
+            } catch (Exception e) {
+                posting.setEligibilityCriteria(null);
+            }
+        }
+
         jobPostingRepository.save(posting);
         return ResponseEntity.ok(posting);
     }
@@ -60,10 +101,39 @@ public class JobPostingController {
 
         posting.setStatus(JobPosting.Status.PUBLISHED);
         jobPostingRepository.save(posting);
+
+        // Embed the posting so it can be matched against student resumes. A
+        // published-but-unembedded posting is invisible to student matching, so
+        // this failure must be loud in the logs - not silently swallowed.
+        HttpHeaders jsonHeaders = new HttpHeaders();
+        jsonHeaders.setContentType(MediaType.APPLICATION_JSON);
+
+        String skills = posting.getRequiredSkills() == null ? "" : posting.getRequiredSkills();
+        Map<String, Object> embedRequest = Map.of(
+                "posting_id", posting.getId().toString(),
+                "text", String.join("\n",
+                        posting.getTitle(),
+                        posting.getDescription(),
+                        "Required skills: " + skills)
+        );
+        HttpEntity<Map<String, Object>> embedEntity = new HttpEntity<>(embedRequest, jsonHeaders);
+
+        try {
+            restTemplate.postForObject(ragServiceUrl + "/embed-posting", embedEntity, Map.class);
+        } catch (Exception e) {
+            System.err.println("WARNING: posting " + posting.getId() + " published but embedding failed: "
+                    + e.getMessage());
+            // Posting is still published (status change already saved), but will be
+            // invisible to student matching until embedding succeeds. This should be
+            // visible to the placement cell, not just a server log - flagged for a
+            // future "needs attention" UI.
+        }
+
         return ResponseEntity.ok(posting);
     }
 
-    // Students see only published postings
+    // Students see only published postings they are eligible for; recruiters and the
+    // placement cell see everything.
     @GetMapping
     @PreAuthorize("hasAnyRole('STUDENT', 'RECRUITER', 'PLACEMENT_CELL')")
     public List<JobPosting> list(Authentication authentication) {
@@ -71,7 +141,19 @@ public class JobPostingController {
                 .anyMatch(a -> a.getAuthority().equals("ROLE_STUDENT"));
 
         if (isStudent) {
-            return jobPostingRepository.findByStatus(JobPosting.Status.PUBLISHED);
+            User user = userRepository.findByEmail(authentication.getName())
+                    .orElseThrow(() -> new RuntimeException("User not found"));
+
+            StudentProfile profile = studentProfileRepository.findByUser(user)
+                    .orElseGet(() -> {
+                        StudentProfile newProfile = new StudentProfile();
+                        newProfile.setUser(user);
+                        return studentProfileRepository.save(newProfile);
+                    });
+
+            return jobPostingRepository.findByStatus(JobPosting.Status.PUBLISHED).stream()
+                    .filter(p -> eligibilityService.isEligible(p, profile))
+                    .toList();
         }
         return jobPostingRepository.findAll();
     }

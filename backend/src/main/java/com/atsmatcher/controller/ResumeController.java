@@ -1,6 +1,8 @@
 // backend/src/main/java/com/atsmatcher/controller/ResumeController.java
 package com.atsmatcher.controller;
 
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Value;
@@ -12,6 +14,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -111,5 +114,47 @@ public class ResumeController {
         }
 
         return ResponseEntity.ok(resume);
+    }
+
+    // Latest resume for the logged-in student, with parsed sections and upload
+    // metadata, so the dashboard can render the "your resume" panel without a
+    // re-upload.
+    @GetMapping("/mine")
+    @PreAuthorize("hasRole('STUDENT')")
+    public ResponseEntity<?> getMyResume(Authentication authentication) {
+        try {
+            User user = userRepository.findByEmail(authentication.getName())
+                    .orElseThrow(() -> new RuntimeException("User not found"));
+
+            StudentProfile profile = studentProfileRepository.findByUser(user).orElse(null);
+            if (profile == null) {
+                return ResponseEntity.ok(Map.of("hasResume", false));
+            }
+
+            List<Resume> resumes = resumeRepository.findAll().stream()
+                    .filter(r -> r.getStudent().getId().equals(profile.getId()))
+                    .toList();
+
+            if (resumes.isEmpty()) {
+                return ResponseEntity.ok(Map.of("hasResume", false));
+            }
+
+            Resume latest = resumes.get(resumes.size() - 1); // same "most recent" shortcut used elsewhere
+
+            String rawText = latest.getRawText() != null ? latest.getRawText() : "";
+            String preview = rawText.substring(0, Math.min(300, rawText.length()));
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("hasResume", true);
+            response.put("uploadedAt", latest.getUploadedAt().toString());
+            response.put("parsedSections", latest.getParsedSections() != null ? latest.getParsedSections() : "{}");
+            response.put("rawTextPreview", preview);
+            return ResponseEntity.ok(response);
+
+        } catch (Exception e) {
+            System.err.println("Error in getMyResume: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.status(500).body(Map.of("error", "Failed to load resume: " + e.getMessage()));
+        }
     }
 }

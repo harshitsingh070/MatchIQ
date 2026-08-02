@@ -24,7 +24,7 @@ export default function AppHeader() {
   }
 
   return (
-    <nav className="flex items-baseline justify-between px-10 py-6 border-b border-rule bg-paper-raised">
+    <nav className="sticky top-0 z-50 flex w-full items-baseline justify-between px-10 py-6 border-b border-rule bg-paper-raised">
       <Link
         to={authed ? homeForRole(session.role) : '/'}
         className="font-display text-xl font-semibold text-ink no-underline"
