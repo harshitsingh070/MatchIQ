@@ -34,6 +34,12 @@ public class MatchResult {
     @Column(columnDefinition = "TEXT")
     private String explanation;
 
+    @Column(name = "present_skills", columnDefinition = "TEXT")
+    private String presentSkills;
+
+    @Column(name = "missing_skills", columnDefinition = "TEXT")
+    private String missingSkills;
+
     @Column(name = "computed_at", nullable = false)
     private LocalDateTime computedAt = LocalDateTime.now();
 
@@ -48,6 +54,10 @@ public class MatchResult {
     public void setScore(BigDecimal score) { this.score = score; }
     public String getExplanation() { return explanation; }
     public void setExplanation(String explanation) { this.explanation = explanation; }
+    public String getPresentSkills() { return presentSkills; }
+    public void setPresentSkills(String presentSkills) { this.presentSkills = presentSkills; }
+    public String getMissingSkills() { return missingSkills; }
+    public void setMissingSkills(String missingSkills) { this.missingSkills = missingSkills; }
     public LocalDateTime getComputedAt() { return computedAt; }
     public void setComputedAt(LocalDateTime computedAt) { this.computedAt = computedAt; }
 }

@@ -90,7 +90,9 @@ public class MatchController {
                     "postingId", posting.getId(),
                     "title", posting.getTitle(),
                     "score", outcome.score,
-                    "explanation", outcome.explanation
+                    "explanation", outcome.explanation,
+                    "presentSkills", outcome.presentSkills,
+                    "missingSkills", outcome.missingSkills
             ));
         }
 

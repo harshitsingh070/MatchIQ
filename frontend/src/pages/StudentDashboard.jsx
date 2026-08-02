@@ -126,6 +126,26 @@ export default function StudentDashboard() {
                   <div>
                     <h3 className="font-display text-lg font-medium mb-1.5">{m.title}</h3>
                     <p className="text-ink-soft text-sm leading-relaxed max-w-[52ch]">{m.explanation}</p>
+                    <div className="mt-2.5 flex flex-wrap gap-1.5">
+                      {m.presentSkills?.length > 0 &&
+                        m.presentSkills.map((s) => (
+                          <span
+                            key={`p-${s}`}
+                            className="text-xs font-mono px-2 py-0.5 rounded-sm bg-sage text-paper-raised"
+                          >
+                            {s}
+                          </span>
+                        ))}
+                      {m.missingSkills?.length > 0 &&
+                        m.missingSkills.map((s) => (
+                          <span
+                            key={`m-${s}`}
+                            className="text-xs font-mono px-2 py-0.5 rounded-sm bg-brick text-paper-raised"
+                          >
+                            missing: {s}
+                          </span>
+                        ))}
+                    </div>
                   </div>
                   <MatchSeal score={m.score} />
                 </div>

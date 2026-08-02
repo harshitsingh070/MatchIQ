@@ -71,41 +71,31 @@ def get_llm_client(provider: str) -> OpenAI:
     return client
 
 
-def parse_llm_response(text: str) -> dict:
+def extract_required_skills(required_skills_text: str) -> list[str]:
+    """Split a posting's required_skills field into a clean list of skills."""
+    skills = []
+    for part in re.split(r"[,;/]|\band\b", required_skills_text or ""):
+        part = part.strip()
+        if len(part) >= 2:
+            skills.append(part)
+    return skills
+
+
+def compute_skill_gaps(resume_text: str, required_skills: list[str]) -> tuple[list[str], list[str]]:
     """
-    Extract EXPLANATION / PRESENT / MISSING sections from the LLM's structured
-    answer. Gracefully degrades: if the model doesn't follow the format, the
-    whole text becomes the explanation and the skill lists are empty.
+    Deterministically split required skills into those present in the resume
+    and those missing. Uses lookaround boundaries so "Java" does not match
+    inside "JavaScript".
     """
-    explanation = text.strip()
-    present_skills: list[str] = []
-    missing_skills: list[str] = []
-
-    def split_list(block: str) -> list[str]:
-        items = [item.strip() for item in block.split(",") if item.strip()]
-        return [item for item in items if item.lower() != "none"]
-
-    explanation_match = re.search(
-        r"EXPLANATION:\s*(.*?)(?=\n\s*PRESENT:|\n\s*MISSING:|$)",
-        text, re.DOTALL | re.IGNORECASE)
-    present_match = re.search(
-        r"PRESENT:\s*(.*?)(?=\n\s*MISSING:|$)",
-        text, re.DOTALL | re.IGNORECASE)
-    missing_match = re.search(
-        r"MISSING:\s*(.*)", text, re.DOTALL | re.IGNORECASE)
-
-    if explanation_match:
-        explanation = explanation_match.group(1).strip()
-    if present_match:
-        present_skills = split_list(present_match.group(1))
-    if missing_match:
-        missing_skills = split_list(missing_match.group(1))
-
-    return {
-        "explanation": explanation,
-        "present_skills": present_skills,
-        "missing_skills": missing_skills,
-    }
+    present: list[str] = []
+    missing: list[str] = []
+    for skill in required_skills:
+        pattern = r"(?<![a-z0-9])" + re.escape(skill.lower()) + r"(?![a-z0-9])"
+        if re.search(pattern, resume_text.lower()):
+            present.append(skill)
+        else:
+            missing.append(skill)
+    return present, missing
 
 
 def generate_explanation(prompt: str) -> tuple[str, str]:
@@ -349,20 +339,24 @@ def fetch_resume_and_posting_text(resume_id: str, posting_id: str):
         conn.close()
 
     if resume_row is None or posting_row is None:
-        return None, None
+        return None, None, None
 
     resume_text = resume_row[0]
     posting_text = f"{posting_row[0]}\n{posting_row[1]}\nRequired skills: {posting_row[2]}"
-    return resume_text, posting_text
+    return resume_text, posting_text, posting_row[2]
 
 
 # --- Phase 6: LLM-generated match explanation, with automatic provider fallback ---
 @app.post("/explain")
 def explain_match(req: ExplainRequest):
-    resume_text, posting_text = fetch_resume_and_posting_text(req.resume_id, req.posting_id)
+    resume_text, posting_text, required_skills_text = fetch_resume_and_posting_text(
+        req.resume_id, req.posting_id)
 
     if resume_text is None:
         return {"error": "Resume or posting not found"}
+
+    required_skills = extract_required_skills(required_skills_text)
+    present_skills, missing_skills = compute_skill_gaps(resume_text, required_skills)
 
     prompt = f"""You are helping match a candidate's resume against a job posting.
 
@@ -372,19 +366,15 @@ Job posting:
 Resume:
 {resume_text}
 
-Respond with EXACTLY three labelled sections:
+Skills present in the resume: {', '.join(present_skills) if present_skills else 'none'}
+Skills missing from the resume: {', '.join(missing_skills) if missing_skills else 'none'}
 
-EXPLANATION:
-In 2-3 short sentences, explain how well this resume matches the job posting. Mention specific skills that match, and specific requirements that seem missing. Be concise and factual - do not invent skills not present in the resume.
-
-PRESENT:
-Comma-separated list of the resume's skills that satisfy the posting's requirements.
-
-MISSING:
-Comma-separated list of the posting's required skills or attributes that the resume does not mention. Write "none" if nothing is missing."""
+In 2-3 short sentences, explain how well this resume matches the job posting.
+Mention the specific present and missing skills listed above. Be concise and
+factual - do not invent skills not present in the resume."""
 
     try:
-        raw_text, provider_used = generate_explanation(prompt)
+        explanation, provider_used = generate_explanation(prompt)
     except RuntimeError as exc:
         return {
             "resume_id": req.resume_id,
@@ -392,13 +382,11 @@ Comma-separated list of the posting's required skills or attributes that the res
             "error": str(exc),
         }
 
-    parsed = parse_llm_response(raw_text)
-
     return {
         "resume_id": req.resume_id,
         "posting_id": req.posting_id,
         "provider": provider_used,
-        "explanation": parsed["explanation"],
-        "present_skills": parsed["present_skills"],
-        "missing_skills": parsed["missing_skills"],
+        "explanation": explanation,
+        "present_skills": present_skills,
+        "missing_skills": missing_skills,
     }
