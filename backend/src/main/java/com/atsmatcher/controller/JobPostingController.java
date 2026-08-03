@@ -92,6 +92,46 @@ public class JobPostingController {
         return ResponseEntity.ok(posting);
     }
 
+    // Recruiters edit only their own DRAFT postings. Published postings are
+    // already embedded and potentially scored against students, so changing
+    // them here would silently invalidate that cache — rejected server-side.
+    @PutMapping("/{id}")
+    @PreAuthorize("hasRole('RECRUITER')")
+    public ResponseEntity<?> updateDraft(@PathVariable UUID id, @RequestBody JobPostingRequest req,
+                                        Authentication authentication) {
+        JobPosting posting = jobPostingRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Posting not found"));
+
+        if (!posting.getRecruiter().getEmail().equals(authentication.getName())) {
+            return ResponseEntity.status(403).body("Not your posting");
+        }
+        if (posting.getStatus() != JobPosting.Status.DRAFT) {
+            return ResponseEntity.status(400).body("Only draft postings can be edited");
+        }
+
+        posting.setTitle(req.getTitle());
+        posting.setDescription(req.getDescription());
+        posting.setRequiredSkills(req.getRequiredSkills());
+
+        Map<String, Object> eligibility = new HashMap<>();
+        if (req.getEligibleBranches() != null && !req.getEligibleBranches().isEmpty()) {
+            eligibility.put("branches", req.getEligibleBranches());
+        }
+        if (req.getMinCgpa() != null) {
+            eligibility.put("minCgpa", req.getMinCgpa());
+        }
+
+        try {
+            posting.setEligibilityCriteria(eligibility.isEmpty() ? null
+                    : objectMapper.writeValueAsString(eligibility));
+        } catch (Exception e) {
+            posting.setEligibilityCriteria(null);
+        }
+
+        jobPostingRepository.save(posting);
+        return ResponseEntity.ok(posting);
+    }
+
     // Placement cell approves and publishes a posting
     @PutMapping("/{id}/publish")
     @PreAuthorize("hasRole('PLACEMENT_CELL')")

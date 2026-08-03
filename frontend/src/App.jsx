@@ -6,6 +6,8 @@ import Login from './pages/Login.jsx';
 import Register from './pages/Register.jsx';
 import StudentDashboard from './pages/StudentDashboard.jsx';
 import PlacementCellDashboard from './pages/PlacementCellDashboard.jsx';
+import StudentsRegister from './pages/StudentsRegister.jsx';
+import StudentDetail from './pages/StudentDetail.jsx';
 import RecruiterDashboard from './pages/RecruiterDashboard.jsx';
 import PostingCandidates from './pages/PostingCandidates.jsx';
 
@@ -34,6 +36,22 @@ export default function App() {
           }
         />
         <Route
+          path="/placement-cell/students"
+          element={
+            <RequireAuth role="PLACEMENT_CELL">
+              <StudentsRegister />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/placement-cell/students/:email"
+          element={
+            <RequireAuth role="PLACEMENT_CELL">
+              <StudentDetail />
+            </RequireAuth>
+          }
+        />
+        <Route
           path="/recruiter"
           element={
             <RequireAuth role="RECRUITER">
@@ -44,7 +62,7 @@ export default function App() {
         <Route
           path="/recruiter/postings/:id/candidates"
           element={
-            <RequireAuth role="RECRUITER">
+            <RequireAuth roles={['RECRUITER', 'PLACEMENT_CELL']}>
               <PostingCandidates />
             </RequireAuth>
           }

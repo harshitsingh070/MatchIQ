@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { getAnalytics, publishPosting } from '../api/client.js';
 import StatusTag from '../components/StatusTag.jsx';
 
@@ -122,7 +123,7 @@ export default function PlacementCellDashboard() {
                 </div>
                 <ScoreBar score={p.avgScore} />
               </div>
-              {p.status === 'DRAFT' && (
+              {p.status === 'DRAFT' ? (
                 <div className="shrink-0">
                   <button
                     className="btn-primary-sm disabled:opacity-50 disabled:cursor-not-allowed"
@@ -133,9 +134,34 @@ export default function PlacementCellDashboard() {
                     {publishingId === p.postingId ? 'Publishing…' : 'Publish'}
                   </button>
                 </div>
+              ) : (
+                <div className="shrink-0">
+                  <Link
+                    to={`/recruiter/postings/${p.postingId}/candidates`}
+                    className="btn-primary-sm"
+                  >
+                    View candidates &rarr;
+                  </Link>
+                </div>
               )}
             </div>
           ))}
+      </div>
+
+      <div className="mt-16 flex items-start justify-between gap-6 border-t border-rule pt-10">
+        <div>
+          <p className="eyebrow">Enrollment</p>
+          <h2 className="font-display text-2xl font-medium mb-2">Students register</h2>
+          <p className="text-ink-soft text-sm max-w-md">
+            Every registered student, resume status, and how they're scoring across published postings.
+          </p>
+        </div>
+        <Link
+          to="/placement-cell/students"
+          className="btn-primary shrink-0"
+        >
+          View students &rarr;
+        </Link>
       </div>
     </div>
   );

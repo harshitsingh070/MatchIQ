@@ -86,3 +86,7 @@ logs/
 # ==========================
 *.zip
 *.tar.gz
+
+ats_resume_matcher_architecture.png
+PRD_Campus_Placement_ATS_Resume_Matcher.md
+PRD_Campus_Placement_ATS_Resume_Matcher.md.pdf

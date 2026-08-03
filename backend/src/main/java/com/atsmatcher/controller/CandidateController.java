@@ -47,9 +47,23 @@ public class CandidateController {
         // TODO: extend with a proper query at scale - same known shortcut as MatchController
         List<Resume> allResumes = resumeRepository.findAll();
 
+        // A student can have many resume versions on file (each upload adds a new
+        // row rather than replacing the old one). Candidates are ranked per student,
+        // not per resume version, so keep only the latest upload per student before
+        // scoring - otherwise the same student shows up once per past resume.
+        Map<UUID, Resume> latestPerStudent = new HashMap<>();
+        for (Resume resume : allResumes) {
+            UUID studentId = resume.getStudent().getId();
+            Resume current = latestPerStudent.get(studentId);
+            if (current == null || resume.getUploadedAt().isAfter(current.getUploadedAt())) {
+                latestPerStudent.put(studentId, resume);
+            }
+        }
+        List<Resume> latestResumes = new ArrayList<>(latestPerStudent.values());
+
         List<Map<String, Object>> results = new ArrayList<>();
 
-        for (Resume resume : allResumes) {
+        for (Resume resume : latestResumes) {
             // Deliberate deviation from MatchController's strict error propagation:
             // a recruiter viewing candidates shouldn't get a 500 because one student's
             // embedding hasn't been generated — skip that resume and rank the rest.
@@ -69,6 +83,8 @@ public class CandidateController {
                 put("cgpa", resume.getStudent().getCgpa());
                 put("score", matchOutcome.score);
                 put("explanation", matchOutcome.explanation);
+                put("presentSkills", matchOutcome.presentSkills);
+                put("missingSkills", matchOutcome.missingSkills);
             }});
         }
 

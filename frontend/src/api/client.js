@@ -84,6 +84,14 @@ export function createPosting(payload) {
   });
 }
 
+// Recruiter edits their own DRAFT posting (published postings are rejected).
+export function updatePosting(id, payload) {
+  return request(`/postings/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
+}
+
 // Placement cell publishes a posting.
 export function publishPosting(id) {
   return request(`/postings/${id}/publish`, { method: 'PUT' });
@@ -92,6 +100,24 @@ export function publishPosting(id) {
 // Placement cell analytics: summary stats + per-posting performance.
 export function getAnalytics() {
   return request('/placement-cell/analytics');
+}
+
+// Placement cell students register: every student, resume status, and how they
+// score across published postings. Sorted resume-missing-first.
+export function getStudents() {
+  return request('/placement-cell/students');
+}
+
+// Placement cell drill-down into one student: profile, latest resume, and every
+// posting they've been scored against.
+export function getStudentDetail(email) {
+  return request(`/placement-cell/students/${encodeURIComponent(email)}`);
+}
+
+// Recruiter-scoped stats: summary + per-posting performance for the signed-in
+// recruiter's own postings only.
+export function getMyPostingsStats() {
+  return request('/recruiter/my-postings');
 }
 
 // Student's ranked matches: [{ postingId, title, score, explanation }].
@@ -108,6 +134,18 @@ export function getMyTrend() {
 // "your resume" panel on the dashboard.
 export function getMyResume() {
   return request('/resumes/mine');
+}
+
+// Student's own eligibility profile ({ branch, cgpa }) and its updates.
+export function getMyProfile() {
+  return request('/students/me/profile');
+}
+
+export function updateMyProfile(payload) {
+  return request('/students/me/profile', {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
 }
 
 // Ranked candidates for one posting: [{ resumeId, studentEmail, branch, cgpa, score, explanation }].

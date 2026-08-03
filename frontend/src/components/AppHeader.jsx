@@ -10,6 +10,16 @@ import {
 const NAV_LINK_CLASS =
   'text-ink-soft text-xs tracking-wide uppercase no-underline border-b border-transparent pb-0.5 hover:text-ink hover:border-brass transition-colors';
 
+// Role-specific destination for each user's home dashboard.
+const ROLE_NAV = {
+  STUDENT: [{ label: 'My matches', to: '/student' }],
+  RECRUITER: [{ label: 'Postings', to: '/recruiter' }],
+  PLACEMENT_CELL: [
+    { label: 'Postings register', to: '/placement-cell' },
+    { label: 'Students register', to: '/placement-cell/students' },
+  ],
+};
+
 const SIGN_OUT_CLASS =
   'text-ink-soft text-xs tracking-wide uppercase cursor-pointer bg-transparent border-0 border-b border-transparent pb-0.5 hover:text-ink hover:border-brass transition-colors';
 
@@ -37,6 +47,13 @@ export default function AppHeader() {
             <span className="font-mono text-xs tracking-widest uppercase text-ink-soft">
               {ROLE_LABELS[session.role] || session.role} · {session.email}
             </span>
+            <div className="flex items-baseline gap-6">
+              {ROLE_NAV[session.role]?.map((item) => (
+                <Link key={item.label} to={item.to} className={NAV_LINK_CLASS}>
+                  {item.label}
+                </Link>
+              ))}
+            </div>
             <button type="button" onClick={handleSignOut} className={SIGN_OUT_CLASS}>
               Sign out
             </button>

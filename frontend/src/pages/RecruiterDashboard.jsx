@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { createPosting, getJobPostings } from '../api/client.js';
+import { Link } from 'react-router-dom';
+import { createPosting, getMyPostingsStats, updatePosting } from '../api/client.js';
 import StatusTag from '../components/StatusTag.jsx';
-import { getSession } from '../lib/auth.js';
 
 const EMPTY_FORM = { title: '', description: '', requiredSkills: '', eligibleBranches: '', minCgpa: '' };
 
@@ -15,22 +15,28 @@ function formatTimestamp(iso) {
   return iso.slice(0, 16).replace('T', ' ');
 }
 
+function StatTile({ label, value }) {
+  return (
+    <div className="border border-rule px-5 py-4">
+      <p className="font-mono text-2xl text-ink mb-1">{value}</p>
+      <p className="font-mono text-[0.65rem] uppercase tracking-wide text-ink-soft">{label}</p>
+    </div>
+  );
+}
+
 export default function RecruiterDashboard() {
   const [form, setForm] = useState(EMPTY_FORM);
-  const [postings, setPostings] = useState([]);
+  const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const [editingId, setEditingId] = useState(null);
 
   function load() {
     setLoading(true);
     setError(null);
-    getJobPostings()
-      .then((data) => {
-        const { email } = getSession();
-        const mine = email ? data.filter((p) => p.recruiter?.email === email) : data;
-        setPostings(mine);
-      })
+    getMyPostingsStats()
+      .then(setStats)
       .catch(() => setError('Your postings could not be read. Is the backend running?'))
       .finally(() => setLoading(false));
   }
@@ -48,7 +54,7 @@ export default function RecruiterDashboard() {
     setSubmitting(true);
     setError(null);
     try {
-      await createPosting({
+      const payload = {
         title: form.title.trim(),
         description: form.description.trim(),
         requiredSkills: form.requiredSkills.trim(),
@@ -56,15 +62,45 @@ export default function RecruiterDashboard() {
           ? form.eligibleBranches.split(',').map((b) => b.trim()).filter(Boolean)
           : [],
         minCgpa: form.minCgpa ? parseFloat(form.minCgpa) : null,
-      });
+      };
+      if (editingId) {
+        await updatePosting(editingId, payload);
+      } else {
+        await createPosting(payload);
+      }
       setForm(EMPTY_FORM);
+      setEditingId(null);
       load();
     } catch {
-      setError('The posting could not be saved. Check the required fields and try again.');
+      setError(
+        editingId
+          ? 'The draft could not be updated. Check the required fields and try again.'
+          : 'The posting could not be saved. Check the required fields and try again.'
+      );
     } finally {
       setSubmitting(false);
     }
   }
+
+  function startEditing(posting) {
+    setForm({
+      title: posting.title,
+      description: posting.description,
+      requiredSkills: posting.requiredSkills || '',
+      eligibleBranches: (posting.eligibleBranches || []).join(', '),
+      minCgpa: posting.minCgpa != null ? String(posting.minCgpa) : '',
+    });
+    setEditingId(posting.postingId);
+    setError(null);
+  }
+
+  function cancelEditing() {
+    setForm(EMPTY_FORM);
+    setEditingId(null);
+    setError(null);
+  }
+
+  const postings = stats?.postings || [];
 
   return (
     <div className="page-shell">
@@ -76,7 +112,27 @@ export default function RecruiterDashboard() {
 
       {error && <div className={ALERT_CLASS}>{error}</div>}
 
-      <h2 className={SECTION_CLASS}>New posting</h2>
+      {stats && (
+        <>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-rule border border-rule mb-3">
+            <StatTile label="My postings" value={stats.summary.totalPostings} />
+            <StatTile label="Published" value={stats.summary.publishedCount} />
+            <StatTile label="Candidates scored" value={stats.summary.totalCandidatesScored} />
+            <StatTile label="Avg. match" value={`${stats.summary.avgScoreAcrossPostings}%`} />
+          </div>
+          <p className="font-mono text-xs text-ink-soft mb-10">
+            Scores are computed on demand, so a posting showing 0 scored may just mean no one has
+            viewed it yet — not that no one is eligible.
+          </p>
+        </>
+      )}
+
+      <h2 className={SECTION_CLASS}>{editingId ? 'Edit draft' : 'New posting'}</h2>
+      {editingId && (
+        <p className="font-mono text-xs text-brass mb-4">
+          Editing a draft — published postings cannot be edited.
+        </p>
+      )}
       <form className="bg-paper-raised border border-rule p-6" onSubmit={handleSubmit} noValidate>
         <div className="mb-6">
           <label className="field-label" htmlFor="posting-title">Title</label>
@@ -136,9 +192,20 @@ export default function RecruiterDashboard() {
             placeholder="e.g. 7.5 — leave blank for no cutoff"
           />
         </div>
-        <button className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed" type="submit" disabled={submitting}>
-          {submitting ? 'Saving…' : 'Save posting'}
-        </button>
+        <div className="flex items-center gap-4">
+          <button className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed" type="submit" disabled={submitting}>
+            {submitting ? 'Saving…' : editingId ? 'Update draft' : 'Save posting'}
+          </button>
+          {editingId && (
+            <button
+              type="button"
+              onClick={cancelEditing}
+              className="font-mono text-xs uppercase tracking-wide text-ink-soft hover:text-ink transition-colors"
+            >
+              Cancel
+            </button>
+          )}
+        </div>
       </form>
 
       <h2 className={SECTION_CLASS}>On file</h2>
@@ -152,32 +219,59 @@ export default function RecruiterDashboard() {
         {!loading &&
           postings.map((p, i) => (
             <div
-              key={p.id}
+              key={p.postingId}
               className="grid grid-cols-[auto_1fr_auto] items-start gap-5 py-6 border-b border-rule opacity-0 animate-rowIn"
               style={{ animationDelay: `${i * 85}ms` }}
             >
               <StatusTag status={p.status} />
               <div>
                 <h3 className="font-display text-lg font-medium mb-1.5">{p.title}</h3>
-                <p className="font-mono text-xs tracking-wide uppercase text-ink-soft mt-1.5">
+                <p className="font-mono text-xs tracking-wide uppercase text-ink-soft">
                   Filed {formatTimestamp(p.createdAt)}
                 </p>
-              </div>
-              <div className="shrink-0">
                 {p.status === 'PUBLISHED' ? (
-                  <a
-                    href={`/recruiter/postings/${p.id}/candidates`}
-                    className="font-mono text-xs uppercase tracking-wide text-brass hover:text-brass-soft transition-colors"
-                  >
-                    View candidates &rarr;
-                  </a>
+                  <>
+                    {p.candidateCount === 0 ? (
+                      <p className="font-mono text-xs text-ink-soft mt-2">
+                        Not yet scored &mdash; matching happens when a student or you view candidates.
+                      </p>
+                    ) : (
+                      <p className="font-mono text-xs text-ink-soft mt-2">
+                        {p.candidateCount} scored &middot; avg {p.avgScore}% &middot; top {p.topScore}%
+                      </p>
+                    )}
+                    {p.topCandidateEmail && (
+                      <p className="font-mono text-xs text-sage mt-1">
+                        Top match: {p.topCandidateEmail} ({p.topScore}%)
+                      </p>
+                    )}
+                    <Link
+                      to={`/recruiter/postings/${p.postingId}/candidates`}
+                      className="btn-primary-sm mt-3 inline-block"
+                    >
+                      View candidates &rarr;
+                    </Link>
+                  </>
                 ) : (
-                  <span
-                    className="inline-block font-mono text-xs font-semibold tracking-widest uppercase text-ink-soft bg-paper-raised border border-rule rounded px-3.5 py-2 opacity-60 cursor-not-allowed"
-                    title="Publish this posting to view candidates"
-                  >
-                    View candidates
-                  </span>
+                  <>
+                    <p className="font-mono text-xs text-ink-soft mt-2">
+                      Awaiting placement cell approval &mdash; candidates unavailable until published.
+                    </p>
+                    {p.status === 'DRAFT' && (
+                      <button
+                        onClick={() => startEditing(p)}
+                        className="font-mono text-xs uppercase tracking-wide text-brass hover:text-brass-soft transition-colors mt-2"
+                      >
+                        Edit draft
+                      </button>
+                    )}
+                  </>
+                )}
+                {(p.eligibleBranches?.length > 0 || p.minCgpa) && (
+                  <p className="font-mono text-xs text-brass mt-1">
+                    {p.eligibleBranches?.join(', ')}
+                    {p.minCgpa ? ` \u00b7 ${p.minCgpa}+ CGPA` : ''}
+                  </p>
                 )}
               </div>
             </div>

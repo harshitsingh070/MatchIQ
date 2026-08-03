@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { getJobPostings, getMyMatches, getMyTrend, uploadResume } from '../api/client.js';
+import { getJobPostings, getMyMatches, getMyProfile, getMyTrend, updateMyProfile, uploadResume } from '../api/client.js';
 import MatchSeal from '../components/MatchSeal.jsx';
 import ResumePanel from '../components/ResumePanel.jsx';
 
@@ -22,14 +22,23 @@ export default function StudentDashboard() {
   const [refreshKey, setRefreshKey] = useState(0);
   const fileInputRef = useRef(null);
 
+  const [profile, setProfile] = useState({ branch: '', cgpa: '' });
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [profileSaved, setProfileSaved] = useState(false);
+  const [profileError, setProfileError] = useState(null);
+
   function loadMatches() {
     setLoading(true);
     setError(null);
-    Promise.all([getMyMatches(), getJobPostings(), getMyTrend()])
-      .then(([matchList, postings, trendData]) => {
+    Promise.all([getMyMatches(), getJobPostings(), getMyTrend(), getMyProfile()])
+      .then(([matchList, postings, trendData, profileData]) => {
         setMatches(matchList);
         setPostingCount(postings.length);
         setTrend(trendData);
+        setProfile({
+          branch: profileData?.branch ?? '',
+          cgpa: profileData?.cgpa != null ? String(profileData.cgpa) : '',
+        });
       })
       .catch(() =>
         setError(
@@ -57,6 +66,29 @@ export default function StudentDashboard() {
       setError('Resume upload failed. The parsing service may be unavailable; try again shortly.');
     } finally {
       setUploading(false);
+    }
+  }
+
+  async function handleSaveProfile(e) {
+    e.preventDefault();
+    setSavingProfile(true);
+    setProfileError(null);
+    setProfileSaved(false);
+    const cgpa = profile.cgpa === '' ? null : parseFloat(profile.cgpa);
+    try {
+      const updated = await updateMyProfile({ branch: profile.branch, cgpa });
+      setProfile({
+        branch: updated.branch ?? '',
+        cgpa: updated.cgpa != null ? String(updated.cgpa) : '',
+      });
+      setProfileSaved(true);
+      loadMatches();
+    } catch (err) {
+      setProfileError(err?.message === 'Request failed: 400'
+        ? 'CGPA must be between 0 and 10.'
+        : 'Profile could not be saved. Try again.');
+    } finally {
+      setSavingProfile(false);
     }
   }
 
@@ -154,6 +186,57 @@ export default function StudentDashboard() {
         </div>
 
         <aside className="border-l border-rule pl-8 lg:sticky lg:top-8 lg:self-start lg:max-h-[calc(100vh-4rem)] lg:overflow-y-auto">
+          <div className="bg-paper-raised border border-rule p-6 mb-8">
+            <div className="mb-4">
+              <p className="eyebrow">Eligibility</p>
+              <h2 className="font-display text-lg font-medium">Your profile</h2>
+            </div>
+            <p className="text-ink-soft text-sm mb-5">
+              Branch and CGPA decide which published postings you're eligible for. Leaving a field
+              blank means it's not set.
+            </p>
+            {profileSaved && (
+              <p className="font-mono text-xs text-sage bg-sage-bg border border-rule border-l-[3px] border-l-sage px-4 py-3 mb-5">
+                Profile saved.
+              </p>
+            )}
+            {profileError && (
+              <p className="font-mono text-xs text-brick bg-brick-bg border border-rule border-l-[3px] border-l-brick px-4 py-3 mb-5">
+                {profileError}
+              </p>
+            )}
+            <form onSubmit={handleSaveProfile} noValidate>
+              <label className="field-label" htmlFor="profile-branch">Branch</label>
+              <input
+                className="field-input mb-4"
+                id="profile-branch"
+                type="text"
+                value={profile.branch}
+                onChange={(e) => setProfile((p) => ({ ...p, branch: e.target.value }))}
+                placeholder="e.g. CSE"
+              />
+              <label className="field-label" htmlFor="profile-cgpa">CGPA</label>
+              <input
+                className="field-input mb-5"
+                id="profile-cgpa"
+                type="number"
+                step="0.1"
+                min="0"
+                max="10"
+                value={profile.cgpa}
+                onChange={(e) => setProfile((p) => ({ ...p, cgpa: e.target.value }))}
+                placeholder="e.g. 8.2"
+              />
+              <button
+                className="btn-primary-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                type="submit"
+                disabled={savingProfile}
+              >
+                {savingProfile ? 'Saving…' : 'Save profile'}
+              </button>
+            </form>
+          </div>
+
           <div className="flex items-start justify-between gap-4 mb-4">
             <div>
               <p className="eyebrow">On file</p>

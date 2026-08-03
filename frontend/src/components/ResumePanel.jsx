@@ -9,12 +9,19 @@ const SECTION_LABELS = {
   other: 'Other',
 };
 
-export default function ResumePanel({ refreshKey }) {
+export default function ResumePanel({ refreshKey, resume: resumeProp }) {
   const [resume, setResume] = useState(null);
   const [status, setStatus] = useState('loading');
   const [showFull, setShowFull] = useState(false);
 
   useEffect(() => {
+    // If a resume object is passed in, render it directly (placement cell
+    // viewing another student). Otherwise fetch the signed-in student's own.
+    if (resumeProp) {
+      setResume(resumeProp);
+      setStatus('ready');
+      return;
+    }
     setShowFull(false);
     setStatus('loading');
     getMyResume()
@@ -26,7 +33,7 @@ export default function ResumePanel({ refreshKey }) {
         console.error(err);
         setStatus('error');
       });
-  }, [refreshKey]);
+  }, [refreshKey, resumeProp]);
 
   if (status === 'error') {
     return <p className="font-mono text-xs text-brick">Couldn't load your resume — try refreshing.</p>;
@@ -35,7 +42,7 @@ export default function ResumePanel({ refreshKey }) {
     return <p className="font-mono text-xs text-ink-soft">Reading file&hellip;</p>;
   }
   if (!resume?.hasResume) {
-    return <p className="font-mono text-xs text-ink-soft">No resume on file yet. Upload one to see what was extracted.</p>;
+    return <p className="font-mono text-xs text-ink-soft">No resume on file yet.</p>;
   }
 
   let sections = {};
